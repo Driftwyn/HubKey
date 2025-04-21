@@ -1,0 +1,44 @@
+name: Key Expiration Check
+
+on:
+  schedule:
+    - cron: '0 * * * *'  # Runs at the top of every hour
+  workflow_dispatch:  # Allows manual trigger
+
+jobs:
+  handle-expiration:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+    
+    - name: Install jq (for JSON processing)
+      run: sudo apt-get install jq
+
+    - name: Get current keys
+      id: get_keys
+      run: |
+        curl -o keys.json https://raw.githubusercontent.com/${{ github.repository }}/main/keys.json
+        
+    - name: Remove expired keys
+      id: remove_expired_keys
+      run: |
+        # Get current date in Unix timestamp format
+        current_timestamp=$(date +%s)
+
+        # Loop through all keys in the JSON file and remove expired ones
+        jq -r '.keys | map(select(((date -t .created | tonumber) < 86400) == true))' keys.json > new_keys.json
+        
+        # Print updated keys
+        cat new_keys.json
+
+    - name: Commit and push changes if keys have been removed
+      run: |
+        git config --global user.name "GitHub Action"
+        git config --global user.email "github-actions@github.com"
+        
+        # Add changes to git if keys were removed
+        git add new_keys.json
+        git commit -m "Remove expired keys"
+        git push
