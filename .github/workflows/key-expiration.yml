@@ -28,7 +28,11 @@ jobs:
         current_timestamp=$(date +%s)
 
         # Loop through all keys in the JSON file and remove expired ones
-        jq -r '.keys | map(select(((date -t .created | tonumber) < 86400) == true))' keys.json > new_keys.json
+        jq -r --arg current_timestamp "$current_timestamp" '
+          .keys |= map(select(
+            (($current_timestamp | tonumber) - (fromdateiso8601 .created)) < 86400
+          ))
+        ' keys.json > new_keys.json
         
         # Print updated keys
         cat new_keys.json
@@ -41,4 +45,19 @@ jobs:
         # Add changes to git if keys were removed
         git add new_keys.json
         git commit -m "Remove expired keys"
+        git push
+
+    - name: Add new key
+      run: |
+        new_key="NEWKEY-1234-5678"
+        current_timestamp=$(date --utc +%Y-%m-%dT%H:%M:%SZ)
+        
+        # Add new key to the updated keys.json
+        jq --arg key "$new_key" --arg created "$current_timestamp" \
+          '.keys += [{"key": $key, "created": $created}]' new_keys.json > updated_keys.json
+          
+        # Commit and push the new key
+        mv updated_keys.json new_keys.json
+        git add new_keys.json
+        git commit -m "Add new key"
         git push
