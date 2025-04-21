@@ -1,0 +1,40 @@
+name: Key Expiration Handler
+
+on:
+  schedule:
+    - cron: '0 * * * *'  # This runs the action once every hour.
+
+jobs:
+  expiration-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.x'
+
+      - name: Install jq
+        run: sudo apt-get install jq
+
+      - name: Check and remove expired keys
+        run: |
+          current_timestamp=$(date --utc +%Y-%m-%dT%H:%M:%SZ)
+          
+          # Read the keys.json file and filter out the expired keys (older than 24 hours).
+          jq --arg current_time "$current_timestamp" '
+            .keys |= map(select((($current_time | fromdateiso8601) - (.created | fromdateiso8601)) < 86400))
+          ' keys.json > updated_keys.json
+
+          # Replace the original keys.json with the filtered file
+          mv updated_keys.json keys.json
+
+      - name: Commit and push changes (if any)
+        run: |
+          git config --local user.name "GitHub Actions"
+          git config --local user.email "actions@github.com"
+          git add keys.json
+          git commit -m "Remove expired keys"
+          git push
